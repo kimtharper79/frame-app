@@ -2,9 +2,8 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import {
   User,
   onAuthStateChanged,
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
 } from 'firebase/auth'
 import { auth } from '../lib/firebase'
@@ -14,13 +13,12 @@ import {
   subscribeToUserProfile,
 } from '../lib/firestore'
 
-const EMAIL_KEY = 'frameEmailForSignIn'
-
 interface AuthContextType {
   user: User | null
   profile: UserProfile | null
   loading: boolean
-  sendLoginLink: (email: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<void>
+  createAccount: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -58,29 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => profileUnsub?.()
   }, [user])
 
-  // Complete email link sign-in when the user returns via the magic link
-  useEffect(() => {
-    if (!isSignInWithEmailLink(auth, window.location.href)) return
-    const email = window.localStorage.getItem(EMAIL_KEY)
-    if (!email) return
+  const signIn = async (email: string, password: string) => {
+    await signInWithEmailAndPassword(auth, email, password)
+  }
 
-    signInWithEmailLink(auth, email, window.location.href)
-      .then(() => {
-        window.localStorage.removeItem(EMAIL_KEY)
-        window.history.replaceState({}, document.title, window.location.pathname)
-      })
-      .catch(console.error)
-  }, [])
-
-  const sendLoginLink = async (email: string) => {
-    const appUrl =
-      import.meta.env.VITE_APP_URL ||
-      window.location.origin + window.location.pathname
-    await sendSignInLinkToEmail(auth, email, {
-      url: appUrl,
-      handleCodeInApp: true,
-    })
-    window.localStorage.setItem(EMAIL_KEY, email)
+  const createAccount = async (email: string, password: string) => {
+    await createUserWithEmailAndPassword(auth, email, password)
   }
 
   const signOut = async () => {
@@ -89,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, sendLoginLink, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, createAccount, signOut }}>
       {children}
     </AuthContext.Provider>
   )
