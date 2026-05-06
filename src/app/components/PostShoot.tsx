@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Plus, Minus, Camera, X } from "lucide-react";
+import { Plus, Minus, Camera, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
 import { createShoot } from "../../lib/firestore";
@@ -21,9 +21,8 @@ export function PostShoot({ onBack, onSubmit }: PostShootProps) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
-  const [description, setDescription] = useState("");
+  const [styleMood, setStyleMood] = useState("");
   const [equipment, setEquipment] = useState("");
-  const [bookingLink, setBookingLink] = useState("");
   const [modelsNeeded, setModelsNeeded] = useState(1);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -44,11 +43,6 @@ export function PostShoot({ onBack, onSubmit }: PostShootProps) {
     reader.readAsDataURL(file);
   };
 
-  const removePhoto = () => {
-    setPhotoFile(null);
-    setPhotoPreview(null);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !profile) return;
@@ -66,14 +60,9 @@ export function PostShoot({ onBack, onSubmit }: PostShootProps) {
         );
       }
 
-      // Format date/time for display
-      const displayDate = date
-        ? new Date(date + "T12:00:00").toLocaleDateString("en-US", {
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          })
-        : "";
+      const displayDate = new Date(date + "T12:00:00").toLocaleDateString("en-US", {
+        month: "long", day: "numeric", year: "numeric",
+      });
 
       await createShoot({
         photographerUid: user.uid,
@@ -84,11 +73,12 @@ export function PostShoot({ onBack, onSubmit }: PostShootProps) {
         time: time || "TBD",
         location: location.trim(),
         modelsNeeded,
-        description: description.trim(),
+        styleMood: styleMood.trim(),
         equipment: equipment.trim(),
         tags: selectedTags,
-        bookingLink: bookingLink.trim() || null,
+        bookingLink: null,
         photoUrl,
+        createdBy: user.email ?? "",
       });
 
       toast.success("Shoot posted!");
@@ -104,17 +94,10 @@ export function PostShoot({ onBack, onSubmit }: PostShootProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-4 border-b border-[#E8E4DC] flex-shrink-0">
-        <button
-          onClick={onBack}
-          className="p-2 -ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
-        >
-          <ArrowLeft className="w-6 h-6 text-[#1A1A1A]" />
-        </button>
+        <h1 className="text-[#1A1A1A]">Post a shoot.</h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <h1 className="text-[#1A1A1A] mb-6">Post a shoot.</h1>
-
+      <div className="flex-1 overflow-y-auto px-4 py-6 pb-8">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Title */}
           <div>
@@ -131,14 +114,14 @@ export function PostShoot({ onBack, onSubmit }: PostShootProps) {
           {/* Photo */}
           <div>
             <label className="block text-[#1A1A1A] mb-2">
-              Add a shoot photo <span className="text-[#6B6860]">(optional)</span>
+              Shoot Photo <span className="text-[#6B6860]">(optional)</span>
             </label>
             {photoPreview ? (
               <div className="relative w-full aspect-video rounded-lg overflow-hidden">
                 <img src={photoPreview} alt="Shoot" className="w-full h-full object-cover" />
                 <button
                   type="button"
-                  onClick={removePhoto}
+                  onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
                   className="absolute top-2 right-2 w-8 h-8 bg-[#1A1A1A] bg-opacity-70 rounded-full flex items-center justify-center text-white"
                 >
                   <X className="w-5 h-5" />
@@ -194,41 +177,41 @@ export function PostShoot({ onBack, onSubmit }: PostShootProps) {
               <button
                 type="button"
                 onClick={() => setModelsNeeded(Math.max(1, modelsNeeded - 1))}
-                className="w-[44px] h-[44px] flex items-center justify-center bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A]"
+                className="w-[44px] h-[44px] flex items-center justify-center bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg"
               >
-                <Minus className="w-5 h-5" />
+                <Minus className="w-5 h-5 text-[#1A1A1A]" />
               </button>
               <span className="text-xl text-[#1A1A1A] min-w-[2rem] text-center">{modelsNeeded}</span>
               <button
                 type="button"
                 onClick={() => setModelsNeeded(modelsNeeded + 1)}
-                className="w-[44px] h-[44px] flex items-center justify-center bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A]"
+                className="w-[44px] h-[44px] flex items-center justify-center bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-5 h-5 text-[#1A1A1A]" />
               </button>
             </div>
           </div>
 
-          {/* Description */}
+          {/* Style/Mood */}
           <div>
-            <label className="block text-[#1A1A1A] mb-2">Style/Mood Description</label>
+            <label className="block text-[#1A1A1A] mb-2">Style / Mood</label>
             <textarea
               rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the style, mood, and what you're looking for in models..."
+              value={styleMood}
+              onChange={(e) => setStyleMood(e.target.value)}
+              placeholder="Describe the vibe, lighting, wardrobe, and what you need from models..."
               className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A] placeholder:text-[#6B6860] focus:outline-none focus:ring-2 focus:ring-[#F2A900] resize-none"
             />
           </div>
 
           {/* Equipment */}
           <div>
-            <label className="block text-[#1A1A1A] mb-2">Equipment Being Used</label>
+            <label className="block text-[#1A1A1A] mb-2">Equipment</label>
             <input
               type="text"
               value={equipment}
               onChange={(e) => setEquipment(e.target.value)}
-              placeholder="e.g., Canon EOS R5, 85mm f/1.4, Profoto B10 lighting kit"
+              placeholder="e.g., Canon EOS R5, 85mm f/1.4, Profoto B10"
               className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A] placeholder:text-[#6B6860] focus:outline-none focus:ring-2 focus:ring-[#F2A900]"
             />
           </div>
@@ -252,20 +235,6 @@ export function PostShoot({ onBack, onSubmit }: PostShootProps) {
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Booking link */}
-          <div>
-            <label className="block text-[#1A1A1A] mb-2">
-              Booking Link <span className="text-[#6B6860]">(optional)</span>
-            </label>
-            <input
-              type="url"
-              value={bookingLink}
-              onChange={(e) => setBookingLink(e.target.value)}
-              placeholder="https://calendly.com/yourname/shoot"
-              className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A] placeholder:text-[#6B6860] focus:outline-none focus:ring-2 focus:ring-[#F2A900]"
-            />
           </div>
 
           <button

@@ -104,10 +104,10 @@ export function ShootDetail({ shoot, onBack, onInterested }: ShootDetailProps) {
               <p className="text-[#1A1A1A]">{shoot.equipment}</p>
             </div>
           )}
-          {shoot.description && (
+          {shoot.styleMood && (
             <div>
               <p className="text-sm text-[#6B6860] mb-1">Style/Mood</p>
-              <p className="text-[#1A1A1A] leading-relaxed">{shoot.description}</p>
+              <p className="text-[#1A1A1A] leading-relaxed">{shoot.styleMood}</p>
             </div>
           )}
           <div className="flex gap-2 flex-wrap">

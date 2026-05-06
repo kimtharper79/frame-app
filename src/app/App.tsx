@@ -41,10 +41,7 @@ export default function App() {
     setCurrentScreen(screen);
   };
 
-  const showBottomNav =
-    currentScreen !== "post" &&
-    currentScreen !== "shoot" &&
-    currentScreen !== "login";
+  const showBottomNav = currentScreen !== "login";
 
   const navItems = [
     { screen: "board" as Screen, label: "Board", icon: Home },

@@ -28,11 +28,12 @@ export interface Shoot {
   time: string
   location: string
   modelsNeeded: number
-  description: string
+  styleMood: string
   equipment: string
   tags: string[]
   bookingLink: string | null
   photoUrl: string | null
+  createdBy?: string  // user email
   createdAt?: Timestamp
 }
 
@@ -66,6 +67,7 @@ export interface UserProfile {
   initials: string
   bio: string
   major: string
+  role: string  // Student | Faculty | Alumni
   portfolioUrls: string[]
 }
 
@@ -176,6 +178,7 @@ export async function getOrCreateUserProfile(uid: string, email: string): Promis
     initials,
     bio: '',
     major: 'Photography BFA',
+    role: 'Student',
     portfolioUrls: [],
   }
   await setDoc(ref, profile)

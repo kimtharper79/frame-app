@@ -9,7 +9,6 @@ interface ProfileProps {
   onNavigateToShoot: (shoot: Shoot) => void;
 }
 
-// Static reviews — a real review system is out of scope for this version
 const STATIC_REVIEWS = [
   { id: "1", from: "Maya Chen", rating: 5, text: "Professional and punctual. Great to work with!", date: "Apr 2026" },
   { id: "2", from: "Jordan Ellis", rating: 5, text: "Brought great energy to the shoot. Would book again.", date: "Mar 2026" },
@@ -23,15 +22,25 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
   const [portfolioUrls, setPortfolioUrls] = useState<(string | null)[]>([null, null, null, null]);
   const [uploading, setUploading] = useState<number | null>(null);
 
-  // Pull the user's portfolio URLs from Firestore profile
+  // Editable profile fields
+  const [displayName, setDisplayName] = useState("");
+  const [major, setMajor] = useState("");
+  const [role, setRole] = useState("Student");
+  const [bio, setBio] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Sync local state when profile loads
   useEffect(() => {
     if (!profile) return;
+    setDisplayName(profile.displayName ?? "");
+    setMajor(profile.major ?? "");
+    setRole(profile.role ?? "Student");
+    setBio(profile.bio ?? "");
     const urls: (string | null)[] = [null, null, null, null];
     profile.portfolioUrls.slice(0, 4).forEach((url, i) => { urls[i] = url; });
     setPortfolioUrls(urls);
   }, [profile]);
 
-  // Subscribe to only this user's shoots
   useEffect(() => {
     if (!user) return;
     return subscribeToShoots((all) => {
@@ -39,17 +48,34 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
     });
   }, [user]);
 
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await updateUserProfile(user.uid, {
+        displayName: displayName.trim() || displayName,
+        major: major.trim(),
+        role,
+        bio: bio.trim(),
+      });
+      toast.success("Profile saved.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handlePortfolioUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-
     setUploading(index);
     try {
       const url = await uploadImage(file, `portfolios/${user.uid}/${index}_${Date.now()}`);
       const newUrls = [...portfolioUrls];
       newUrls[index] = url;
       setPortfolioUrls(newUrls);
-      // Persist to Firestore
       await updateUserProfile(user.uid, {
         portfolioUrls: newUrls.filter(Boolean) as string[],
       });
@@ -72,18 +98,11 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
     });
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-  };
-
-  const displayName = profile?.displayName ?? "—";
   const initials = profile?.initials ?? "?";
-  const major = profile?.major ?? "Photography BFA";
-  const bio = profile?.bio ?? "Looking for new collaborations.";
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      {/* Profile header */}
+      {/* Avatar */}
       <div className="px-4 py-8 border-b border-[#E8E4DC]">
         <div className="flex flex-col items-center">
           <div className="relative mb-3">
@@ -94,15 +113,70 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
               <Camera className="w-5 h-5 text-white" />
             </button>
           </div>
-          <h2 className="text-[#1A1A1A] mb-1">{displayName}</h2>
-          <p className="text-sm text-[#6B6860] mb-2">{major}</p>
-          {bio && (
-            <p className="text-sm text-[#1A1A1A] text-center max-w-xs">{bio}</p>
-          )}
+          <p className="text-sm text-[#6B6860]">{user?.email}</p>
         </div>
       </div>
 
       <div className="px-4 py-6 space-y-6">
+        {/* Editable fields */}
+        <div className="space-y-4">
+          <h3 className="text-[#1A1A1A]">Edit Profile</h3>
+
+          <div>
+            <label className="block text-sm text-[#1A1A1A] mb-1">Display Name</label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Your name"
+              className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A] placeholder:text-[#6B6860] focus:outline-none focus:ring-2 focus:ring-[#F2A900]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-[#1A1A1A] mb-1">Major</label>
+            <input
+              type="text"
+              value={major}
+              onChange={(e) => setMajor(e.target.value)}
+              placeholder="e.g., Photography BFA"
+              className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A] placeholder:text-[#6B6860] focus:outline-none focus:ring-2 focus:ring-[#F2A900]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-[#1A1A1A] mb-1">Year / Role</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#F2A900]"
+            >
+              <option value="Student">Student</option>
+              <option value="Faculty">Faculty</option>
+              <option value="Alumni">Alumni</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-[#1A1A1A] mb-1">Bio</label>
+            <textarea
+              rows={3}
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="A few words about you..."
+              className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A] placeholder:text-[#6B6860] focus:outline-none focus:ring-2 focus:ring-[#F2A900] resize-none"
+            />
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full bg-[#F2A900] text-[#1A1A1A] py-3 rounded-lg min-h-[44px] active:bg-[#D99500] transition-colors disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+
         {/* Portfolio grid */}
         <div>
           <h3 className="text-[#1A1A1A] mb-3">Portfolio</h3>
@@ -211,7 +285,7 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
 
         {/* Sign out */}
         <button
-          onClick={handleSignOut}
+          onClick={signOut}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border border-[#E8E4DC] text-[#6B6860] min-h-[44px] active:bg-[#FAF8F5] transition-colors"
         >
           <LogOut className="w-4 h-4" />
