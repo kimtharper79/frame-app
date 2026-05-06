@@ -29,7 +29,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Firebase auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u)
@@ -41,7 +40,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe
   }, [])
 
-  // Firestore profile — created on first sign-in, kept in sync
   useEffect(() => {
     if (!user?.email) return
     let profileUnsub: (() => void) | undefined
