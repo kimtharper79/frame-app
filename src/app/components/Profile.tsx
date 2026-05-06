@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Star, Camera, Plus, X, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
 import { Shoot, subscribeToShoots, updateUserProfile } from "../../lib/firestore";
 import { uploadImage } from "../../lib/storage";
+import { uploadToCloudinary } from "../../lib/cloudinary";
 
 interface ProfileProps {
   onNavigateToShoot: (shoot: Shoot) => void;
@@ -17,10 +18,13 @@ const STATIC_REVIEWS = [
 
 export function Profile({ onNavigateToShoot }: ProfileProps) {
   const { user, profile, signOut } = useAuth();
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   const [activeTab, setActiveTab] = useState<"posts" | "bookmarked">("posts");
   const [myPosts, setMyPosts] = useState<Shoot[]>([]);
   const [portfolioUrls, setPortfolioUrls] = useState<(string | null)[]>([null, null, null, null]);
   const [uploading, setUploading] = useState<number | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Editable profile fields
   const [displayName, setDisplayName] = useState("");
@@ -48,6 +52,26 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
     });
   }, [user]);
 
+  // ── Avatar upload via Cloudinary ─────────────────────────────────────────────
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploadingAvatar(true);
+    try {
+      const url = await uploadToCloudinary(file);
+      await updateUserProfile(user.uid, { profilePhotoUrl: url });
+      toast.success("Profile photo updated.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Upload failed. Try again.");
+    } finally {
+      setUploadingAvatar(false);
+      // Reset so the same file can be re-selected
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  };
+
+  // ── Profile field save ────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
@@ -67,6 +91,7 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
     }
   };
 
+  // ── Portfolio grid ────────────────────────────────────────────────────────────
   const handlePortfolioUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -99,20 +124,50 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
   };
 
   const initials = profile?.initials ?? "?";
+  const profilePhotoUrl = profile?.profilePhotoUrl;
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {/* Avatar */}
       <div className="px-4 py-8 border-b border-[#E8E4DC]">
         <div className="flex flex-col items-center">
+          {/* Hidden file input for avatar */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarChange}
+            className="hidden"
+          />
+
           <div className="relative mb-3">
-            <div className="w-24 h-24 rounded-full bg-[#F2A900] flex items-center justify-center text-[#1A1A1A] text-3xl font-medium">
-              {initials}
-            </div>
-            <button className="absolute bottom-0 right-0 w-[44px] h-[44px] rounded-full bg-[#1A1A1A] flex items-center justify-center border-2 border-white">
-              <Camera className="w-5 h-5 text-white" />
+            {/* Avatar: photo or initials fallback */}
+            {profilePhotoUrl ? (
+              <img
+                src={profilePhotoUrl}
+                alt={displayName}
+                className="w-24 h-24 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full bg-[#F2A900] flex items-center justify-center text-[#1A1A1A] text-3xl font-medium">
+                {initials}
+              </div>
+            )}
+
+            {/* Camera badge — taps the hidden file input */}
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="absolute bottom-0 right-0 w-[44px] h-[44px] rounded-full bg-[#1A1A1A] flex items-center justify-center border-2 border-white disabled:opacity-60"
+            >
+              {uploadingAvatar ? (
+                <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : (
+                <Camera className="w-5 h-5 text-white" />
+              )}
             </button>
           </div>
+
           <p className="text-sm text-[#6B6860]">{user?.email}</p>
         </div>
       </div>
@@ -255,7 +310,6 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
                 ))}
               </>
             )}
-
             {activeTab === "bookmarked" && (
               <p className="text-sm text-[#6B6860]">Bookmarks coming soon.</p>
             )}

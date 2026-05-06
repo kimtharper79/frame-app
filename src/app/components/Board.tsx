@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useShoots } from "../../hooks/useShoots";
 import { useAuth } from "../../contexts/AuthContext";
-import { Shoot, getOrCreateThread, sendMessage } from "../../lib/firestore";
+import { Shoot, getOrCreateThread, sendMessage, deleteShoot } from "../../lib/firestore";
 
 const STYLE_TAGS = ["All", "Portrait", "Fashion", "Documentary", "Studio Lighting", "Editorial", "Experimental"];
+
+const FRAME_URL = "https://kimtharper79.github.io/frame-app/";
 
 // Seed data shown while Firestore is empty or loading
 const SEED_SHOOTS: Shoot[] = [
@@ -86,6 +88,20 @@ const SEED_SHOOTS: Shoot[] = [
   },
 ];
 
+/** Returns true if the shoot date is strictly before today (midnight). */
+function isShootPast(dateStr: string): boolean {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    d.setHours(0, 0, 0, 0);
+    return d < today;
+  } catch {
+    return false;
+  }
+}
+
 interface BoardProps {
   onNavigateToShoot: (shoot: Shoot) => void;
   onInterested: (threadId: string) => void;
@@ -97,13 +113,19 @@ export function Board({ onNavigateToShoot, onInterested }: BoardProps) {
   const [selectedTag, setSelectedTag] = useState("All");
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Show Firestore data once loaded; fall back to seed shoots while loading or if empty
   const shoots = !loading && firestoreShoots.length > 0 ? firestoreShoots : SEED_SHOOTS;
 
   const filtered =
     selectedTag === "All"
       ? shoots
       : shoots.filter((s) => s.tags.includes(selectedTag));
+
+  // Active shoots first, past shoots at the bottom
+  const activeFiltered = filtered.filter((s) => !isShootPast(s.date));
+  const pastFiltered   = filtered.filter((s) => isShootPast(s.date));
+  const sortedFiltered = [...activeFiltered, ...pastFiltered];
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
 
   const handleInterested = async (shoot: Shoot) => {
     if (!user || !profile) {
@@ -129,13 +151,8 @@ export function Board({ onNavigateToShoot, onInterested }: BoardProps) {
           photographerName: shoot.photographerName,
           photographerInitials: shoot.photographerInitials,
         },
-        {
-          uid: user.uid,
-          displayName: profile.displayName,
-          initials: profile.initials,
-        }
+        { uid: user.uid, displayName: profile.displayName, initials: profile.initials }
       );
-      // Send the opening message and notify the photographer
       await sendMessage(threadId, user.uid, `I'm interested in your shoot: "${shoot.title}"`, shoot.photographerUid);
       onInterested(threadId);
     } catch (err) {
@@ -143,6 +160,26 @@ export function Board({ onNavigateToShoot, onInterested }: BoardProps) {
       toast.error("Couldn't send message. Try again.");
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleDelete = async (shoot: Shoot) => {
+    if (!window.confirm(`Delete "${shoot.title}"?`)) return;
+    try {
+      await deleteShoot(shoot.id);
+      toast.success("Shoot deleted.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not delete. Try again.");
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(FRAME_URL);
+      toast("Link copied");
+    } catch {
+      toast.error("Could not copy link.");
     }
   };
 
@@ -175,6 +212,7 @@ export function Board({ onNavigateToShoot, onInterested }: BoardProps) {
 
       {/* Feed */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {/* Loading skeletons */}
         {loading && (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
@@ -191,73 +229,111 @@ export function Board({ onNavigateToShoot, onInterested }: BoardProps) {
           </div>
         )}
 
-        {!loading && filtered.length === 0 && (
+        {!loading && sortedFiltered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <p className="text-[#1A1A1A] mb-2">No shoots posted yet.</p>
             <p className="text-sm text-[#6B6860]">Be the first — tap Post to share yours.</p>
           </div>
         )}
 
-        {filtered.map((shoot) => (
-          <div
-            key={shoot.id}
-            className="bg-white border border-[#E8E4DC] rounded-lg overflow-hidden"
-          >
-            {shoot.photoUrl && (
-              <button
-                onClick={() => onNavigateToShoot(shoot)}
-                className="block w-full aspect-video overflow-hidden"
-              >
-                <img
-                  src={shoot.photoUrl}
-                  alt={shoot.title}
-                  className="w-full h-full object-cover"
-                />
-              </button>
-            )}
+        {sortedFiltered.map((shoot) => {
+          const past   = isShootPast(shoot.date);
+          const isOwn  = !!user && shoot.photographerUid === user.uid;
 
-            <div className="p-4 space-y-3">
-              {/* Photographer row */}
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F2A900] flex items-center justify-center text-[#1A1A1A] text-sm font-medium flex-shrink-0">
-                  {shoot.photographerInitials}
+          return (
+            <div
+              key={shoot.id}
+              className={`bg-white border rounded-lg overflow-hidden ${
+                past ? "border-[#E8E4DC] opacity-75" : "border-[#E8E4DC]"
+              }`}
+            >
+              {/* Hero image */}
+              {shoot.photoUrl && (
+                <button
+                  onClick={() => onNavigateToShoot(shoot)}
+                  className="block w-full aspect-video overflow-hidden"
+                >
+                  <img
+                    src={shoot.photoUrl}
+                    alt={shoot.title}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              )}
+
+              <div className="p-4 space-y-3">
+                {/* Photographer row + action icons */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#F2A900] flex items-center justify-center text-[#1A1A1A] text-sm font-medium flex-shrink-0">
+                      {shoot.photographerInitials}
+                    </div>
+                    <p className="text-[#1A1A1A]">{shoot.photographerName}</p>
+                  </div>
+
+                  <div className="flex items-center">
+                    {/* Share */}
+                    <button
+                      onClick={handleShare}
+                      className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#6B6860] active:text-[#1A1A1A] transition-colors"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                    {/* Delete — own posts only */}
+                    {isOwn && (
+                      <button
+                        onClick={() => handleDelete(shoot)}
+                        className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#6B6860] active:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[#1A1A1A]">{shoot.photographerName}</p>
+
+                {/* Shoot info — tapping opens detail */}
+                <button
+                  onClick={() => onNavigateToShoot(shoot)}
+                  className="w-full text-left space-y-1"
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-[#1A1A1A]">{shoot.title}</h3>
+                    {past && (
+                      <span className="px-2 py-0.5 bg-[#E8E4DC] text-[#6B6860] rounded-full text-xs whitespace-nowrap">
+                        Shoot passed
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-[#6B6860]">{shoot.date} • {shoot.time}</p>
+                  <p className="text-sm text-[#6B6860]">{shoot.location}</p>
+                  <p className="text-sm text-[#6B6860] mt-1">
+                    {shoot.modelsNeeded} {shoot.modelsNeeded === 1 ? "model" : "models"} needed
+                  </p>
+                </button>
+
+                {/* Tags */}
+                <div className="flex gap-2 flex-wrap">
+                  {shoot.tags.map((tag) => (
+                    <span key={tag} className="px-3 py-1 bg-[#E8E4DC] text-[#6B6860] rounded-full text-sm">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                {/* CTA — hidden on past shoots */}
+                {!past && (
+                  <button
+                    onClick={() => handleInterested(shoot)}
+                    disabled={busyId === shoot.id}
+                    className="w-full bg-[#F2A900] text-[#1A1A1A] py-3 rounded-lg min-h-[44px] active:bg-[#D99500] transition-colors disabled:opacity-60"
+                  >
+                    {busyId === shoot.id ? "Sending…" : "I'm interested"}
+                  </button>
+                )}
               </div>
-
-              {/* Shoot info — tapping opens detail */}
-              <button
-                onClick={() => onNavigateToShoot(shoot)}
-                className="w-full text-left space-y-1"
-              >
-                <h3 className="text-[#1A1A1A]">{shoot.title}</h3>
-                <p className="text-sm text-[#6B6860]">{shoot.date} • {shoot.time}</p>
-                <p className="text-sm text-[#6B6860]">{shoot.location}</p>
-                <p className="text-sm text-[#6B6860] mt-1">
-                  {shoot.modelsNeeded} {shoot.modelsNeeded === 1 ? "model" : "models"} needed
-                </p>
-              </button>
-
-              {/* Tags */}
-              <div className="flex gap-2 flex-wrap">
-                {shoot.tags.map((tag) => (
-                  <span key={tag} className="px-3 py-1 bg-[#E8E4DC] text-[#6B6860] rounded-full text-sm">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-
-              {/* CTA */}
-              <button
-                onClick={() => handleInterested(shoot)}
-                disabled={busyId === shoot.id}
-                className="w-full bg-[#F2A900] text-[#1A1A1A] py-3 rounded-lg min-h-[44px] active:bg-[#D99500] transition-colors disabled:opacity-60"
-              >
-                {busyId === shoot.id ? "Sending…" : "I'm interested"}
-              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

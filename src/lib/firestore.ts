@@ -5,6 +5,7 @@ import {
   setDoc,
   getDoc,
   updateDoc,
+  deleteDoc,
   query,
   orderBy,
   where,
@@ -34,6 +35,20 @@ export interface Shoot {
   bookingLink: string | null
   photoUrl: string | null
   createdBy?: string  // user email
+  createdAt?: Timestamp
+}
+
+export interface Collab {
+  id: string
+  posterUid: string         // absent on seed collabs (empty string)
+  posterName: string
+  posterInitials: string
+  title: string
+  whatYouNeed: string
+  major: string
+  deadline: string          // human-readable, e.g. "May 14, 2026" or "Flexible"
+  description: string
+  lookingFor: string        // "Photography student" | "Any photographer" | "Alumni"
   createdAt?: Timestamp
 }
 
@@ -67,8 +82,9 @@ export interface UserProfile {
   initials: string
   bio: string
   major: string
-  role: string  // Student | Faculty | Alumni
+  role: string           // Student | Faculty | Alumni
   portfolioUrls: string[]
+  profilePhotoUrl?: string
 }
 
 // ─── Shoots ──────────────────────────────────────────────────────────────────
@@ -82,6 +98,27 @@ export function subscribeToShoots(cb: (shoots: Shoot[]) => void) {
 
 export async function createShoot(data: Omit<Shoot, 'id' | 'createdAt'>) {
   return addDoc(collection(db, 'shoots'), { ...data, createdAt: serverTimestamp() })
+}
+
+export async function deleteShoot(id: string) {
+  await deleteDoc(doc(db, 'shoots', id))
+}
+
+// ─── Collabs ─────────────────────────────────────────────────────────────────
+
+export function subscribeToCollabs(cb: (collabs: Collab[]) => void) {
+  const q = query(collection(db, 'collabs'), orderBy('createdAt', 'desc'))
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as Collab)))
+  }, (err) => console.error('collabs error:', err))
+}
+
+export async function createCollab(data: Omit<Collab, 'id' | 'createdAt'>) {
+  return addDoc(collection(db, 'collabs'), { ...data, createdAt: serverTimestamp() })
+}
+
+export async function deleteCollab(id: string) {
+  await deleteDoc(doc(db, 'collabs', id))
 }
 
 // ─── Threads ─────────────────────────────────────────────────────────────────
@@ -180,6 +217,7 @@ export async function getOrCreateUserProfile(uid: string, email: string): Promis
     major: 'Photography BFA',
     role: 'Student',
     portfolioUrls: [],
+    profilePhotoUrl: '',
   }
   await setDoc(ref, profile)
   return { uid, ...profile }
