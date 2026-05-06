@@ -53,15 +53,19 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="h-screen w-full bg-white flex items-center justify-center">
+      <div className="h-[100dvh] w-full bg-white flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-[#F2A900] border-t-transparent animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-full bg-[#F5F5F5] flex items-center justify-center">
-      <div className="h-full w-full max-w-[390px] bg-white flex flex-col mx-auto shadow-lg relative overflow-hidden">
+    // Mobile: full-screen white, no centering.
+    // Desktop (sm+): gray background, centered 390px card.
+    <div className="h-[100dvh] w-full bg-white sm:bg-[#F5F5F5] sm:flex sm:items-center sm:justify-center">
+      <div className="h-full w-full sm:max-w-[390px] bg-white flex flex-col sm:shadow-lg relative overflow-hidden">
+
+        {/* Screen content */}
         <div className="flex-1 overflow-hidden">
           {currentScreen === "login" && (
             <Login onLogin={() => setCurrentScreen("board")} />
@@ -94,9 +98,27 @@ export default function App() {
           {currentScreen === "profile" && <Profile onNavigateToShoot={navigateToShoot} />}
         </div>
 
+        {/*
+          Mobile spacer: reserves the same height as the fixed nav so content
+          is never hidden underneath it. Hidden on desktop (sm+) where the nav
+          is back in the document flow.
+        */}
         {showBottomNav && (
-          <nav className="border-t border-[#E8E4DC] bg-white flex-shrink-0">
-            <div className="flex items-center justify-around px-1 py-3 pb-[20px]">
+          <div className="h-[76px] flex-shrink-0 sm:hidden" aria-hidden="true" />
+        )}
+
+        {showBottomNav && (
+          <nav
+            className={[
+              // Mobile: fixed to the bottom of the viewport, full width
+              "fixed bottom-0 left-0 right-0 z-50",
+              // Desktop (sm+): back in the flex column, constrained inside the card
+              "sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:z-auto sm:flex-shrink-0",
+              "border-t border-[#E8E4DC] bg-white",
+            ].join(" ")}
+          >
+            {/* pb-5 = 20px — covers iPhone home indicator */}
+            <div className="flex items-center justify-around px-1 py-3 pb-5">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = currentScreen === item.screen;
