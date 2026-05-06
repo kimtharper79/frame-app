@@ -206,7 +206,11 @@ export function Profile({ onNavigateToShoot }: ProfileProps) {
               onChange={(e) => setRole(e.target.value)}
               className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#F2A900]"
             >
-              <option value="Student">Student</option>
+              <option value="Freshman">Freshman</option>
+              <option value="Sophomore">Sophomore</option>
+              <option value="Junior">Junior</option>
+              <option value="Senior">Senior</option>
+              <option value="Graduate">Graduate</option>
               <option value="Faculty">Faculty</option>
               <option value="Alumni">Alumni</option>
             </select>

@@ -7,41 +7,56 @@ import { Profile } from "./components/Profile";
 import { Collabs } from "./components/Collabs";
 import { Login } from "./components/Login";
 import { Messages } from "./components/Messages";
+import { Onboarding } from "./components/Onboarding";
 import { useAuth } from "../contexts/AuthContext";
 import { useUnreadCount } from "../hooks/useUnreadCount";
 import { Shoot } from "../lib/firestore";
 
-type Screen = "login" | "board" | "shoot" | "post" | "collabs" | "profile" | "messages";
+type Screen =
+  | "login"
+  | "onboarding"
+  | "board"
+  | "shoot"
+  | "post"
+  | "collabs"
+  | "profile"
+  | "messages";
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>("login");
   const [selectedShoot, setSelectedShoot] = useState<Shoot | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const unreadCount = useUnreadCount(user?.uid ?? null);
 
+  // Wait for both auth AND profile before routing.
+  // Show onboarding only when profile.onboarded === false (explicit new-user flag).
+  // Existing users whose profiles predate this field will have onboarded: undefined → go to board.
   useEffect(() => {
-    if (!loading) setCurrentScreen(user ? "board" : "login");
-  }, [user, loading]);
+    if (loading) return;
+    if (!user) { setCurrentScreen("login"); return; }
+    if (!profile) return;   // profile still loading from Firestore — stay put
+    setCurrentScreen(profile.onboarded === false ? "onboarding" : "board");
+  }, [user, loading, profile]);
 
   const navigateToShoot = (shoot: Shoot) => {
     setSelectedShoot(shoot);
     setCurrentScreen("shoot");
   };
 
-  // Called when "I'm interested" succeeds — go straight to the thread
   const openThread = (threadId: string) => {
     setSelectedThreadId(threadId);
     setCurrentScreen("messages");
   };
 
   const navigateTo = (screen: Screen) => {
-    // Clear thread selection when navigating via bottom nav so Messages shows thread list
     if (screen !== "messages") setSelectedThreadId(null);
     setCurrentScreen(screen);
   };
 
-  const showBottomNav = currentScreen !== "login";
+  // Bottom nav hidden on login and onboarding screens
+  const showBottomNav =
+    currentScreen !== "login" && currentScreen !== "onboarding";
 
   const navItems = [
     { screen: "board" as Screen, label: "Board", icon: Home },
@@ -51,7 +66,8 @@ export default function App() {
     { screen: "profile" as Screen, label: "Profile", icon: User },
   ];
 
-  if (loading) {
+  // Spinner while auth loads OR while user is logged in but profile is still fetching
+  if (loading || (user && !profile)) {
     return (
       <div className="h-[100dvh] w-full bg-white flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-[#F2A900] border-t-transparent animate-spin" />
@@ -60,8 +76,6 @@ export default function App() {
   }
 
   return (
-    // Mobile: full-screen white, no centering.
-    // Desktop (sm+): gray background, centered 390px card.
     <div className="h-[100dvh] w-full bg-white sm:bg-[#F5F5F5] sm:flex sm:items-center sm:justify-center">
       <div className="h-full w-full sm:max-w-[390px] bg-white flex flex-col sm:shadow-lg relative overflow-hidden">
 
@@ -69,6 +83,9 @@ export default function App() {
         <div className="flex-1 overflow-hidden">
           {currentScreen === "login" && (
             <Login onLogin={() => setCurrentScreen("board")} />
+          )}
+          {currentScreen === "onboarding" && (
+            <Onboarding onComplete={() => setCurrentScreen("board")} />
           )}
           {currentScreen === "board" && (
             <Board
@@ -95,14 +112,12 @@ export default function App() {
           {currentScreen === "collabs" && (
             <Collabs onOpenMessages={() => navigateTo("messages")} />
           )}
-          {currentScreen === "profile" && <Profile onNavigateToShoot={navigateToShoot} />}
+          {currentScreen === "profile" && (
+            <Profile onNavigateToShoot={navigateToShoot} />
+          )}
         </div>
 
-        {/*
-          Mobile spacer: reserves the same height as the fixed nav so content
-          is never hidden underneath it. Hidden on desktop (sm+) where the nav
-          is back in the document flow.
-        */}
+        {/* Mobile spacer — prevents content scrolling under the fixed nav */}
         {showBottomNav && (
           <div className="h-[76px] flex-shrink-0 sm:hidden" aria-hidden="true" />
         )}
@@ -110,14 +125,11 @@ export default function App() {
         {showBottomNav && (
           <nav
             className={[
-              // Mobile: fixed to the bottom of the viewport, full width
               "fixed bottom-0 left-0 right-0 z-50",
-              // Desktop (sm+): back in the flex column, constrained inside the card
               "sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:z-auto sm:flex-shrink-0",
               "border-t border-[#E8E4DC] bg-white",
             ].join(" ")}
           >
-            {/* pb-5 = 20px — covers iPhone home indicator */}
             <div className="flex items-center justify-around px-1 py-3 pb-5">
               {navItems.map((item) => {
                 const Icon = item.icon;

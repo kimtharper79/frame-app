@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   arrayUnion,
   arrayRemove,
+  increment,
   Timestamp,
 } from 'firebase/firestore'
 import { db } from './firebase'
@@ -21,7 +22,7 @@ import { db } from './firebase'
 
 export interface Shoot {
   id: string
-  photographerUid?: string  // absent on seed/demo shoots
+  photographerUid?: string      // absent on seed/demo shoots
   photographerName: string
   photographerInitials: string
   title: string
@@ -29,27 +30,35 @@ export interface Shoot {
   time: string
   location: string
   modelsNeeded: number
+  interestedCount?: number      // denormalized count of interested/{userId} docs
   styleMood: string
   equipment: string
   tags: string[]
   bookingLink: string | null
   photoUrl: string | null
-  createdBy?: string  // user email
+  createdBy?: string            // user email
   createdAt?: Timestamp
 }
 
 export interface Collab {
   id: string
-  posterUid: string         // absent on seed collabs (empty string)
+  posterUid: string
   posterName: string
   posterInitials: string
   title: string
   whatYouNeed: string
   major: string
-  deadline: string          // human-readable, e.g. "May 14, 2026" or "Flexible"
+  deadline: string
   description: string
-  lookingFor: string        // "Photography student" | "Any photographer" | "Alumni"
+  lookingFor: string
   createdAt?: Timestamp
+}
+
+export interface InterestRecord {
+  userId: string
+  userEmail: string
+  userName: string
+  timestamp?: Timestamp
 }
 
 export interface Thread {
@@ -82,9 +91,11 @@ export interface UserProfile {
   initials: string
   bio: string
   major: string
-  role: string           // Student | Faculty | Alumni
+  role: string                  // Freshman | Sophomore | Junior | Senior | Graduate | Faculty | Alumni
   portfolioUrls: string[]
   profilePhotoUrl?: string
+  onboarded?: boolean           // false for new users until they complete the onboarding screen
+  interestedShoots?: string[]   // shoot IDs the user has expressed interest in
 }
 
 // ─── Shoots ──────────────────────────────────────────────────────────────────
@@ -96,12 +107,53 @@ export function subscribeToShoots(cb: (shoots: Shoot[]) => void) {
   }, (err) => console.error('shoots error:', err))
 }
 
-export async function createShoot(data: Omit<Shoot, 'id' | 'createdAt'>) {
-  return addDoc(collection(db, 'shoots'), { ...data, createdAt: serverTimestamp() })
+export async function createShoot(data: Omit<Shoot, 'id' | 'createdAt' | 'interestedCount'>) {
+  return addDoc(collection(db, 'shoots'), { ...data, interestedCount: 0, createdAt: serverTimestamp() })
 }
 
 export async function deleteShoot(id: string) {
   await deleteDoc(doc(db, 'shoots', id))
+}
+
+// ─── Interest ────────────────────────────────────────────────────────────────
+
+/**
+ * Mark a user's interest in a shoot.
+ * Writes three places atomically:
+ *  1. shoots/{shootId}/interested/{userId}  — the record
+ *  2. shoots/{shootId}.interestedCount      — denormalized count (increment)
+ *  3. users/{userId}.interestedShoots       — array on user profile for quick lookup
+ */
+export async function markInterest(
+  shootId: string,
+  userId: string,
+  userEmail: string,
+  userName: string,
+) {
+  await setDoc(doc(db, 'shoots', shootId, 'interested', userId), {
+    userId,
+    userEmail,
+    userName,
+    timestamp: serverTimestamp(),
+  })
+  await updateDoc(doc(db, 'shoots', shootId), {
+    interestedCount: increment(1),
+  })
+  await updateDoc(doc(db, 'users', userId), {
+    interestedShoots: arrayUnion(shootId),
+  })
+}
+
+/** Subscribe to everyone who has expressed interest in a given shoot (for photographer view). */
+export function subscribeToShootInterested(
+  shootId: string,
+  cb: (records: InterestRecord[]) => void,
+) {
+  return onSnapshot(
+    collection(db, 'shoots', shootId, 'interested'),
+    (snap) => cb(snap.docs.map(d => d.data() as InterestRecord)),
+    (err) => console.error('interested error:', err),
+  )
 }
 
 // ─── Collabs ─────────────────────────────────────────────────────────────────
@@ -155,7 +207,6 @@ export async function getOrCreateThread(
   return tid
 }
 
-// Subscribe to all threads the user participates in (sorted client-side to avoid composite index)
 export function subscribeToThreads(uid: string, cb: (threads: Thread[]) => void) {
   const q = query(collection(db, 'threads'), where('participants', 'array-contains', uid))
   return onSnapshot(q, (snap) => {
@@ -218,6 +269,8 @@ export async function getOrCreateUserProfile(uid: string, email: string): Promis
     role: 'Student',
     portfolioUrls: [],
     profilePhotoUrl: '',
+    onboarded: false,       // triggers the onboarding screen on first login
+    interestedShoots: [],
   }
   await setDoc(ref, profile)
   return { uid, ...profile }
